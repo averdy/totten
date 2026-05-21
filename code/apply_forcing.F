@@ -415,6 +415,11 @@ C     == Global data ==
 #include "DYNVARS.h"
 #include "FFIELDS.h"
 #include "SURFACE.h"
+#ifdef ALLOW_BLING
+# include "GCHEM.h"
+# include "BLING_OPTIONS.h"
+# include "BLING_VARS.h"
+#endif
 
 C     !INPUT/OUTPUT PARAMETERS:
 C     gT_arr    :: the tendency array
@@ -680,7 +685,7 @@ C-    Neither Z-Coords nor kSurface=Nr : not implemented
 #ifdef SHORTWAVE_HEATING
 C Penetrating SW radiation
 CAT(
-#ifdef ( ALLOW_BLING & BLING_HEATING )
+#ifdef BLING_HEATING
 C     Heating due to chlorophyll
       IF ( useBLING ) THEN
        DO j=0,sNy+1

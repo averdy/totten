@@ -153,12 +153,13 @@ C  taken into account
 #ifdef PHYTO_SELF_SHADING
 C  Specify co-efficients for bio-optical model {kChl = k0 +chi[chl]^e}
 C  in red and blue-green fractions (Morel 1988; Foujols et al. 2000)
-      k0_rd  = 0.225 _d 0
-      k0_bg  = 0.0232 _d 0
-      chi_rd = 0.037 _d 0
-      chi_bg = 0.074 _d 0
-      e_rd   = 0.629 _d 0
-      e_bg   = 0.674 _d 0
+CAT Now in bling_readparms
+c      k0_rd  = 0.225 _d 0
+c      k0_bg  = 0.0232 _d 0
+c      chi_rd = 0.037 _d 0
+c      chi_bg = 0.074 _d 0
+c      e_rd   = 0.629 _d 0
+c      e_bg   = 0.674 _d 0
 #endif
 
 C ---------------------------------------------------------------------
