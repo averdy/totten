@@ -1,0 +1,29 @@
+# from MOM
+# GM_background_K: 	isopycnal diffusion coefficien
+# GM_maxSlope:		max slope of isopycnals
+# GM_Scrit:		transition for scaling diffusion coefficient
+# GM_Sd:		half width scaling for diffusion coefficient
+# real background diff:	horizontal diffusion
+
+# ifdef GM_VISBECK_VARIABLE_K, include following in GM_PARM01
+# GM_Visbeck_alpha   = 0.,
+# GM_Visbeck_length  = 2.e+5,
+# GM_Visbeck_depth   = 1.e+3,
+# GM_Visbeck_maxval_K= 2.5e+3,
+
+ &GM_PARM01 
+  GM_Small_Number  = 1.D-20,
+  GM_slopeSqCutoff = 1.D+08,
+  GM_AdvForm         = .TRUE.,
+  GM_isopycK         = 100.,
+  GM_background_K    = 100.,
+  GM_maxSlope        = 4.D-3,
+  GM_taper_scheme    = 'stableGmAdjTap',
+  GM_Kmin_horiz      = 10.,
+  GM_Scrit           = 4.D-3,
+  GM_Sd              = 1.D-3,
+  GM_K3dGMFile='xx_kapgm.effective.V5alpha.iter50_BG.bin'
+  GM_K3dRediFile='xx_kapredi.effective.V5alpha.iter50_BG.bin'
+ &
+
+

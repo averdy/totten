@@ -1,0 +1,19 @@
+# ===================================
+# | Parameters for SHELFICE package |
+# ===================================
+ &SHELFICE_PARM01
+ SHELFICEadvDiffHeatFlux = .TRUE.,
+ SHELFICEboundaryLayer = .FALSE.,
+ SHELFICEtopoFile='BG6_icedraft_v8_totten.bin',
+## SHELFICEloadAnomalyFile = 'ploadanom.bin',
+## SHELFICEmassFile = 'SO3_IceMass_v8.bin',
+ SHELFICEuseGammaFrict = .FALSE.,
+ SHELFICEconserve = .true.,
+## SHELFICEheatTransCoeff=2.e-5,
+## SHELFICEheatTransCoeff=0.0,
+## SHELFICEsaltTransCoeff=0.0,
+ ICEFRONTdepthFile = 'BG6_icedraft_v8_totten.bin',
+ useISOMIPTD = .FALSE.,
+ no_slip_shelfice = .false.,
+ SHELFICEwriteState = .TRUE.,
+ &

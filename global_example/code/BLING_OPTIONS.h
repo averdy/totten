@@ -35,10 +35,10 @@ C nutrient/light limitations. Parameters implemented have yet to be tuned
 
 C Assume that phytoplankton in the mixed layer experience
 C the average light over the mixed layer (as in original BLING model)
-#undef ML_MEAN_LIGHT
+#define ML_MEAN_LIGHT
 
 C Assume that phytoplankton are homogenized in the mixed layer
-#undef ML_MEAN_PHYTO
+#define ML_MEAN_PHYTO
 
 C Calculate MLD using a threshold criterion. If undefined,
 C MLD is calculated using the second derivative of rho(z)
