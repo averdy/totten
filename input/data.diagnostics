@@ -24,7 +24,7 @@
                  'PHIHYD  ',
                  'DRHODR  ',
                  'UVELMASS', 'VVELMASS', 'WVELMASS',
-   filename(1) = '/tmp/diag_state',
+   filename(1) = '/diag_state',
 #
     frequency(2) = 86400.0,
     fields(1,2) = 'TRAC01  ',
@@ -42,7 +42,7 @@
 #                  'BLGFEUP ','BLGFESPM','BLGFEREM','BLGFERD ','BLGFEREC',
 #                  'BLGFEADI','BLGFEADO','GC_Tr06 ',
                   'KPPviscA','KPPdiffS','KPPghatK','KPPRi   ',
-    filename(2) = '/tmp/diag_bgc',
+    filename(2) = '/diag_bgc',
 #                    
     frequency(3) = 86400.0,
     fields(1,3) = 'ETAN    ',
@@ -71,7 +71,7 @@
                   'SHIfwFlx', 'SHIhtFlx',
                   'BLGSURFE','BLGFEBUR',
                   'KPPhbl  ',
-      filename(3) = '/tmp/diag_surf',
+      filename(3) = '/diag_surf',
 #
     frequency(4) = 86400.0,
     fields(1,4) = 'TFLUX   ',
@@ -91,7 +91,7 @@
                   'SIatmFW ',
                   'BLGSURFE',
                   'SIqnet  ','SIqsw   ','SIatmQnt','SItflux',
-    filename(4) = '/tmp/diag_airsea',
+    filename(4) = '/diag_airsea',
 #
    frequency(5) = 86400.0,
    fields(1,5) = 'BLGNCP  ',
@@ -109,7 +109,7 @@
                  'BLGPLIM ',
                  'BLGLLIM ',
                  'BLGIRRIS',
-   filename(5) = '/tmp/diag_bio',
+   filename(5) = '/diag_bio',
 #
 #---
  /
