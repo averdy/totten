@@ -80,7 +80,7 @@
  writeBinaryPrec=32,
  globalfiles=.FALSE.,
  rotationPeriod=86164.,
- debugLevel=4,
+ debugLevel=0,
  /
 
 # Elliptic solver parameters
