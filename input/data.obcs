@@ -3,81 +3,62 @@
 # Open boundaries
 # ***************
  &OBCS_PARM01
- OB_Jnorth =   360*121,
-# OB_Jsouth =   360*1,
- OB_Iwest  =   121*1,
- OB_Ieast  =   121*360,
+ OB_Jnorth = 360*121,
+ OB_Iwest = 121*1,
+ OB_Ieast = 121*360,
 #
  useOrlanskiNorth=.FALSE.,
  useOBCSsponge=.TRUE.,
- useLinearSponge    =.TRUE.,
+ useLinearSponge=.TRUE.,
  OBCSsponge_Salt=.FALSE.,
  OBCSsponge_Theta=.FALSE.,
  useOBCSbalance=.TRUE.,
  useOBCSprescribe=.TRUE.,
 #
-# OBCS are not balanced!!
-# Replace normal flow with zeros??
+ OBNuFile='zeros_totten.bin',
+ OBNvFile='Vvel_bgoseI041_totten_obcn.bin'
+ OBNtFile='Theta_bgoseI041_totten_obcn.bin',
+ OBNsFile='Salt_bgoseI041_totten_obcn.bin',
 #
- OBNuFile='Uvel_bgoseI041_Totten_obcn.bin',
- OBNvFile='Vvel_bgoseI041_Totten_obcn.bin'
- OBNtFile='Theta_bgoseI041_Totten_obcn.bin',
- OBNsFile='Salt_bgoseI041_Totten_obcn.bin',
+ OBWuFile='Uvel_bgoseI041_totten_obcw.bin',
+ OBWvFile='zeros_totten.bin'
+ OBWtFile='Theta_bgoseI041_totten_obcw.bin',
+ OBWsFile='Salt_bgoseI041_totten_obcw.bin',
 #
-# OBSuFile='Uvel_bgoseI041_Totten_obcs.bin',
-# OBSvFile='Vvel_bgoseI041_Totten_obcs.bin'
-# OBStFile='Theta_bgoseI041_Totten_obcs.bin',
-# OBSsFile='Salt_bgoseI041_Totten_obcs.bin',
+ OBEuFile='Uvel_bgoseI041_totten_obce.bin',
+ OBEvFile='zeros_totten.bin'
+ OBEtFile='Theta_bgoseI041_totten_obce.bin',
+ OBEsFile='Salt_bgoseI041_totten_obce.bin',
+#    
+ OBNptrFile(1)='DIC_bgoseI041_totten_obcn.bin',
+ OBNptrFile(2)='Alk_bgoseI041_totten_obcn.bin',
+ OBNptrFile(3)='O2_bgoseI041_totten_obcn.bin',
+ OBNptrFile(4)='NO3_bgoseI041_totten_obcn.bin',
+ OBNptrFile(5)='PO4_bgoseI041_totten_obcn.bin',
+ OBNptrFile(6)='Fe_bgoseI041_totten_obcn.bin',
+ OBNptrFile(7)='DON_bgoseI041_totten_obcn.bin',
+ OBNptrFile(8)='DOP_bgoseI041_totten_obcn.bin',
+ OBNptrFile(9)='biomass_bgoseI041_totten_obcn.bin',
 #
- OBWuFile='Uvel_bgoseI041_Totten_obcw.bin',
- OBWvFile='Vvel_bgoseI041_Totten_obcw.bin'
- OBWtFile='Theta_bgoseI041_Totten_obcw.bin',
- OBWsFile='Salt_bgoseI041_Totten_obcw.bin',
+ OBWptrFile(1)='DIC_bgoseI041_totten_obcw.bin',
+ OBWptrFile(2)='Alk_bgoseI041_totten_obcw.bin',
+ OBWptrFile(3)='O2_bgoseI041_totten_obcw.bin',
+ OBWptrFile(4)='NO3_bgoseI041_totten_obcw.bin',
+ OBWptrFile(5)='PO4_bgoseI041_totten_obcw.bin',
+ OBWptrFile(6)='Fe_bgoseI041_totten_obcw.bin',
+ OBWptrFile(7)='DON_bgoseI041_totten_obcw.bin',
+ OBWptrFile(8)='DOP_bgoseI041_totten_obcw.bin',
+ OBWptrFile(9)='biomass_bgoseI041_totten_obcw.bin',
 #
- OBEuFile='Uvel_bgoseI041_Totten_obce.bin',
- OBEvFile='Vvel_bgoseI041_Totten_obce.bin'
- OBEtFile='Theta_bgoseI041_Totten_obce.bin',
- OBEsFile='Salt_bgoseI041_Totten_obce.bin',
-##    
- OBNptrFile(1)='DIC_bgoseI041_Totten_obcn.bin',
- OBNptrFile(2)='Alk_bgoseI041_Totten_obcn.bin',
- OBNptrFile(3)='O2_bgoseI041_Totten_obcn.bin',
- OBNptrFile(4)='NO3_bgoseI041_Totten_obcn.bin',
- OBNptrFile(5)='PO4_bgoseI041_Totten_obcn.bin',
- OBNptrFile(6)='Fe_bgoseI041_Totten_obcn.bin',
- OBNptrFile(7)='DON_bgoseI041_Totten_obcn.bin',
- OBNptrFile(8)='DOP_bgoseI041_Totten_obcn.bin',
- OBNptrFile(9)='biomass_bgoseI041_Totten_obcn.bin',
-#
-# OBSptrFile(1)='DIC_bgoseI041_Totten_obcs.bin',
-# OBSptrFile(2)='Alk_bgoseI041_Totten_obcs.bin',
-# OBSptrFile(3)='O2_bgoseI041_Totten_obcs.bin',
-# OBSptrFile(4)='NO3_bgoseI041_Totten_obcs.bin',
-# OBSptrFile(5)='PO4_bgoseI041_Totten_obcs.bin',
-# OBSptrFile(6)='Fe_bgoseI041_Totten_obcs.bin',
-# OBSptrFile(7)='DON_bgoseI041_Totten_obcs.bin',
-# OBSptrFile(8)='DOP_bgoseI041_Totten_obcs.bin',
-# OBSptrFile(9)='biomass_bgoseI041_Totten_obcs.bin',
-#
- OBWptrFile(1)='DIC_bgoseI041_Totten_obcw.bin',
- OBWptrFile(2)='Alk_bgoseI041_Totten_obcw.bin',
- OBWptrFile(3)='O2_bgoseI041_Totten_obcw.bin',
- OBWptrFile(4)='NO3_bgoseI041_Totten_obcw.bin',
- OBWptrFile(5)='PO4_bgoseI041_Totten_obcw.bin',
- OBWptrFile(6)='Fe_bgoseI041_Totten_obcw.bin',
- OBWptrFile(7)='DON_bgoseI041_Totten_obcw.bin',
- OBWptrFile(8)='DOP_bgoseI041_Totten_obcw.bin',
- OBWptrFile(9)='biomass_bgoseI041_Totten_obcw.bin',
-#
- OBEptrFile(1)='DIC_bgoseI041_Totten_obce.bin',
- OBEptrFile(2)='Alk_bgoseI041_Totten_obce.bin',
- OBEptrFile(3)='O2_bgoseI041_Totten_obce.bin',
- OBEptrFile(4)='NO3_bgoseI041_Totten_obce.bin',
- OBEptrFile(5)='PO4_bgoseI041_Totten_obce.bin',
- OBEptrFile(6)='Fe_bgoseI041_Totten_obce.bin',
- OBEptrFile(7)='DON_bgoseI041_Totten_obce.bin',
- OBEptrFile(8)='DOP_bgoseI041_Totten_obce.bin',
- OBEptrFile(9)='biomass_bgoseI041_Totten_obce.bin',
+ OBEptrFile(1)='DIC_bgoseI041_totten_obce.bin',
+ OBEptrFile(2)='Alk_bgoseI041_totten_obce.bin',
+ OBEptrFile(3)='O2_bgoseI041_totten_obce.bin',
+ OBEptrFile(4)='NO3_bgoseI041_totten_obce.bin',
+ OBEptrFile(5)='PO4_bgoseI041_totten_obce.bin',
+ OBEptrFile(6)='Fe_bgoseI041_totten_obce.bin',
+ OBEptrFile(7)='DON_bgoseI041_totten_obce.bin',
+ OBEptrFile(8)='DOP_bgoseI041_totten_obce.bin',
+ OBEptrFile(9)='biomass_bgoseI041_totten_obce.bin',
  /
 # *****************************************
 # Orlanski Boundary Condition Parameters.
