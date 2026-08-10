@@ -24,7 +24,6 @@ C     === Global variables ===
 #include "OBCS_PARAMS.h"
 #include "OBCS_GRID.h"
 #include "OBCS_FIELDS.h"
-#include "FFIELDS.h"
 
 C     !INPUT/OUTPUT PARAMETERS:
       _RL myTime
@@ -32,7 +31,8 @@ C     !INPUT/OUTPUT PARAMETERS:
       INTEGER myThid
 CEOP
 
-#if ( defined ALLOW_OBCS && defined ALLOW_OBCS_BALANCE )
+#ifdef ALLOW_OBCS
+#ifdef ALLOW_OBCS_BALANCE
 
 C     !FUNCTIONS:
 
@@ -42,35 +42,15 @@ C     i,j,k        :: loop indices
 C     iB, jB       :: local index of open boundary
 C     msgBuf       :: Informational/error message buffer
       INTEGER bi, bj
-      INTEGER i, j, k
-#if (defined ALLOW_OBCS_EAST ) || (defined ALLOW_OBCS_WEST )
-      INTEGER iB
-#endif
-#if (defined ALLOW_OBCS_NORTH) || (defined ALLOW_OBCS_SOUTH)
-      INTEGER jB
-#endif
+      INTEGER i, j, k, iB, jB
       CHARACTER*(MAX_LEN_MBUF) msgBuf
-      _RL areaOB, tmpA
+      _RL areaOB, areaE, areaW, areaN, areaS, tmpA
       _RL inFlow, flowE, flowW, flowN, flowS
       _RL tileArea(nSx,nSy)
       _RL tileFlow(nSx,nSy)
       _RL tileAreaOB(nSx,nSy)
       _RL tileInFlow(nSx,nSy)
       LOGICAL flag
-      _RL netFreshWaterFlux
-      _RL shelfIceNetMassFlux
-#ifdef ALLOW_OBCS_EAST
-      _RL areaE
-#endif
-#ifdef ALLOW_OBCS_WEST
-      _RL areaW
-#endif
-#ifdef ALLOW_OBCS_NORTH
-      _RL areaN
-#endif
-#ifdef ALLOW_OBCS_SOUTH
-      _RL areaS
-#endif
 
 C---+----1----+----2----+----3----+----4----+----5----+----6----+----7-|--+----|
 C-- Old method (OBCS_balanceFac < 0): balance each OB separately
@@ -78,7 +58,7 @@ C-- New method applies to all OB with BCS_balanceFac >=0 :
 C      ensure that the net inflow through all OB is balanced by correcting
 C      each OB normal flow with a uniform velocity, using the corresponding
 C      weight factor OBCS_balanceFac.
-C  e.g., OBCS_balanceFacE,W,N,S= 1, -1, 2, 0 :
+C  e.g., OBCS_balanceFac_E,W,N,S= 1, -1, 2, 0 :
 C      => correct Western OBWu (by substracting a uniform velocity) to ensure
 C         zero net transport through Western OB
 C      => correct Eastern and Northern normal flow (twice larger Northern
@@ -297,50 +277,6 @@ c    &   'OBCS_balance it,areaS,flowS=', myIter, areaS, flowS
 #endif /* ALLOW_OBCS_SOUTH */
 
 C---+----1----+----2----+----3----+----4----+----5----+----6----+----7-|--+----|
-C--   Calculate a flux throught the surface from the global change of etaH
-C     to take into account both freshwater fluxes like precipitation and
-C     displacement fluxes from advancing ice sheets or imported sea ice
-
-      netFreshWaterFlux = 0. _d 0
-      shelfIceNetMassFlux = 0. _d 0
-      IF ( OBCSbalanceSurf ) THEN
-       DO bj=myByLo(myThid),myByHi(myThid)
-        DO bi=myBxLo(myThid),myBxHi(myThid)
-         tileFlow(bi,bj) = 0.
-         DO j=1,sNy
-          DO i=1,sNx
-           tileFlow(bi,bj) = tileFlow(bi,bj)
-     &          - EmPmR(i,j,bi,bj)
-     &          * _rA(i,j,bi,bj) * maskInC(i,j,bi,bj)
-          ENDDO
-         ENDDO
-        ENDDO
-       ENDDO
-       CALL GLOBAL_SUM_TILE_RL( tileFlow, netFreshWaterFlux, myThid )
-       IF ( debugLevel.GE.debLevC ) THEN
-        WRITE(msgBuf,'(A,I9,A,1P1E16.8)') 'OBCS_balance (it=',
-     &       myIter, ' ) correct for netFreshWaterFlux:',
-     &       netFreshWaterFlux
-        CALL PRINT_MESSAGE( msgBuf, standardMessageUnit,
-     &       SQUEEZE_RIGHT, myThid )
-       ENDIF
-#ifdef ALLOW_SHELFICE
-       IF ( useShelfIce ) THEN
-        CALL SHELFICE_NETMASSFLUX_SURF(
-     O                        shelfIceNetMassFlux,
-     I                        myTime, myIter, myThid )
-        IF ( debugLevel.GE.debLevC ) THEN
-         WRITE(msgBuf,'(A,I9,A,1P1E16.8)') 'OBCS_balance (it=',
-     &        myIter, ' ) correct for shelfIceNetMassFlux:',
-     &        shelfIceNetMassFlux
-         CALL PRINT_MESSAGE( msgBuf, standardMessageUnit,
-     &        SQUEEZE_RIGHT, myThid )
-        ENDIF
-       ENDIF
-#endif /* ALLOW_SHELFICE */
-      ENDIF
-
-C---+----1----+----2----+----3----+----4----+----5----+----6----+----7-|--+----|
 C--   Calculate a unique velocity correction for all (OBCS_balanceFac>0) OB
 C     and correct each OB using corresponding weight factor OBCS_balanceFac
 
@@ -353,18 +289,9 @@ C     and correct each OB using corresponding weight factor OBCS_balanceFac
           CALL PRINT_MESSAGE( msgBuf, standardMessageUnit,
      &                        SQUEEZE_RIGHT, myThid )
         ENDIF
-        IF ( OBCSbalanceSurf ) THEN
-         inFlow = inFlow + netFreshWaterFlux*mass2rUnit
-#ifdef ALLOW_SHELFICE
-         IF ( useShelfIce )
-     &        inFlow = inFlow + shelfIceNetMassFlux*mass2rUnit
-#endif
-        ENDIF
         inFlow = inFlow / areaOB
-CAV(
-C For removing Iceberg mass flux 250gt/yr(=7922m3/s) by SH
-        inFlow = inFlow + (7922 / areaOB)
-CAV)
+      !For removing Iceberg mass flux 250gt/yr(=7922m3/s) by SH
+        inFlow = inFlow + (7922 / areaOB)     
       ENDIF
       IF ( OBCS_balanceFacE.GE.0. ) flowE =  inFlow*OBCS_balanceFacE
       IF ( OBCS_balanceFacW.GE.0. ) flowW = -inFlow*OBCS_balanceFacW
@@ -398,6 +325,7 @@ C--   Add correction:
             IF ( iB.NE.OB_indexNone ) THEN
              OBEu(j,k,bi,bj) = OBEu(j,k,bi,bj)
      &                       + flowE*maskW(iB,j,k,bi,bj)
+!             write(*,*)'flowE', flowE, maskW(iB,j,k,bi,bj)
             ENDIF
            ENDDO
           ENDDO
@@ -418,6 +346,7 @@ C--   Add correction:
             IF ( iB.NE.OB_indexNone ) THEN
              OBWu(j,k,bi,bj) = OBWu(j,k,bi,bj)
      &                       + flowW*maskW(1+iB,j,k,bi,bj)
+!             write(*,*) 'flowW', flowW, maskW(1+iB,j,k,bi,bj)
             ENDIF
            ENDDO
           ENDDO
@@ -438,6 +367,7 @@ C--   Add correction:
             IF ( jB.NE.OB_indexNone ) THEN
              OBNv(i,k,bi,bj) = OBNv(i,k,bi,bj)
      &                       + flowN*maskS(i,jB,k,bi,bj)
+!             write(*,*)'flowN', flowN,maskS(i,jB,k,bi,bj)
             ENDIF
            ENDDO
           ENDDO
@@ -458,6 +388,7 @@ C--   Add correction:
             IF ( jB.NE.OB_indexNone ) THEN
              OBSv(i,k,bi,bj) = OBSv(i,k,bi,bj)
      &                       + flowS*maskS(i,1+jB,k,bi,bj)
+!             write(*,*)'flowS', flowS,maskS(i,1+jB,k,bi,bj)
             ENDIF
            ENDDO
           ENDDO
@@ -471,7 +402,8 @@ C--   Add correction:
       IF (debugMode) CALL DEBUG_LEAVE('OBCS_BALANCE_FLOW',myThid)
 #endif
 
-#endif /* ALLOW_OBCS and ALLOW_OBCS_BALANCE */
+#endif /* ALLOW_OBCS_BALANCE */
+#endif /* ALLOW_OBCS */
 
       RETURN
       END

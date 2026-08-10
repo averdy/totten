@@ -1,8 +1,8 @@
+C $Header: /u/gcmpack/MITgcm/model/src/do_oceanic_phys.F,v 1.149 2017/02/12 20:18:24 gforget Exp $
+C $Name:  $
+
 #include "PACKAGES_CONFIG.h"
 #include "CPP_OPTIONS.h"
-#ifdef ALLOW_MOM_COMMON
-# include "MOM_COMMON_OPTIONS.h"
-#endif
 #ifdef ALLOW_AUTODIFF
 # include "AUTODIFF_OPTIONS.h"
 #endif
@@ -32,9 +32,6 @@
 # ifdef ALLOW_EXF
 #  include "EXF_OPTIONS.h"
 # endif
-#ifdef ALLOW_OBCS
-# include "OBCS_OPTIONS.h"
-#endif
 #endif /* ALLOW_AUTODIFF */
 
 CBOP
@@ -68,7 +65,6 @@ C       |-- SEAICE_COST_SENSI
 C       |
 C       |-- OCN_EXPORT_DATA
 C       |
-C       |-- STIC_THERMODYNAMICS
 C       |-- SHELFICE_THERMODYNAMICS
 C       |
 C       |-- ICEFRONT_THERMODYNAMICS
@@ -78,8 +74,6 @@ C       |
 C       |-- FREEZE_SURFACE
 C       |
 C       |-- EXTERNAL_FORCING_SURF
-C       |
-C       |-- OBCS_ADJUST
 C       |
 C       |- k loop (Nr:1):
 C       | - DWNSLP_CALC_RHO
@@ -110,6 +104,8 @@ C       |-- MY82_CALC
 C       |
 C       |-- GGL90_CALC
 C       |
+C       |-- TIMEAVE_SURF_FLUX
+C       |
 C       |-- GMREDI_CALC_TENSOR
 C       |-- GMREDI_CALC_TENSOR_DUMMY
 C       |
@@ -126,8 +122,6 @@ C       |-- GMREDI_DO_EXCH
 C       |
 C       |-- KPP_DO_EXCH
 C       |
-C       |-- GGL90_EXCHANGES
-C       |
 C       |-- DIAGS_RHO_G
 C       |-- DIAGS_OCEANIC_SURF_FLUX
 C       |-- SALT_PLUME_DIAGNOSTICS_FILL
@@ -142,18 +136,23 @@ C     == Global variables ===
 #include "PARAMS.h"
 #include "GRID.h"
 #include "DYNVARS.h"
+#ifdef ALLOW_TIMEAVE
+# include "TIMEAVE_STATV.h"
+#endif
 #ifdef ALLOW_OFFLINE
 # include "OFFLINE_SWITCH.h"
 #endif
+CAV(
 #ifdef ALLOW_BLING
 #include "BLING_OPTIONS.h"
 #include "GCHEM.h"
 #endif
+CAV)
 
 #ifdef ALLOW_AUTODIFF
-# ifdef ALLOW_AUTODIFF_TAMC
-#  include "tamc.h"
-# endif
+# include "AUTODIFF_MYFIELDS.h"
+# include "tamc.h"
+# include "tamc_keys.h"
 # include "FFIELDS.h"
 # include "SURFACE.h"
 # include "EOS.h"
@@ -170,10 +169,7 @@ C     == Global variables ===
 #  include "EBM.h"
 # endif
 # ifdef ALLOW_EXF
-#  ifdef ALLOW_CTRL
-#   include "CTRL_SIZE.h"
-#   include "CTRL.h"
-#  endif
+#  include "ctrl.h"
 #  include "EXF_FIELDS.h"
 #  ifdef ALLOW_BULKFORMULAE
 #   include "EXF_CONSTANTS.h"
@@ -190,20 +186,12 @@ C     == Global variables ===
 # ifdef ALLOW_SALT_PLUME
 #  include "SALT_PLUME.h"
 # endif
-# ifdef ALLOW_OBCS
-#  include "OBCS_PARAMS.h"
-#  include "OBCS_FIELDS.h"
+# ifdef ALLOW_ECCO
+#  ifdef ALLOW_SIGMAR_COST_CONTRIBUTION
+#   include "ecco_cost.h"
+#  endif
 # endif
 #endif /* ALLOW_AUTODIFF */
-
-#ifdef ALLOW_TAPENADE
-c# ifdef ALLOW_KPP
-c#  include "KPP_PARAMS.h"
-c# endif
-# ifdef ALLOW_SHELFICE
-#  include "SHELFICE.h"
-# endif
-#endif /* ALLOW_TAPENADE */
 
 C     !INPUT/OUTPUT PARAMETERS:
 C     == Routine arguments ==
@@ -216,13 +204,12 @@ C     myThid :: Thread number for this instance of the routine.
 
 C     !LOCAL VARIABLES:
 C     == Local variables
-C     rhoKp1,rhoKm1 :: Density at current level, and @ level minus one
+C     rhoK, rhoKm1  :: Density at current level, and level above
 C     iMin, iMax    :: Ranges and sub-block indices on which calculations
 C     jMin, jMax       are applied.
 C     bi, bj        :: tile indices
 C     msgBuf        :: Temp. for building output string
 C     i,j,k         :: loop indices
-C     kSrf          :: surface index
       _RL rhoKp1  (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
       _RL rhoKm1  (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
       _RL sigmaX  (1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr)
@@ -231,7 +218,7 @@ C     kSrf          :: surface index
       INTEGER iMin, iMax
       INTEGER jMin, jMax
       INTEGER bi, bj
-      INTEGER i, j, k, kSrf
+      INTEGER i, j, k
       CHARACTER*(MAX_LEN_MBUF) msgBuf
       INTEGER doDiagsRho
       LOGICAL calcGMRedi, calcKPP, calcConvect
@@ -242,14 +229,12 @@ C     kSrf          :: surface index
 #ifdef ALLOW_AUTODIFF
       _RL thetaRef
 #endif /* ALLOW_AUTODIFF */
-#ifdef ALLOW_AUTODIFF_TAMC
-C     tkey :: tape key (tile dependent)
-      INTEGER tkey
-#endif
 CEOP
 
-      kSrf = 1
-      IF ( usingPCoords ) kSrf = Nr
+#ifdef ALLOW_AUTODIFF_TAMC
+C--   dummy statement to end declaration part
+      itdkey = 1
+#endif /* ALLOW_AUTODIFF_TAMC */
 
 #ifdef ALLOW_DEBUG
       IF (debugMode) CALL DEBUG_ENTER('DO_OCEANIC_PHYS',myThid)
@@ -280,17 +265,6 @@ CEOP
       ENDIF
 #endif /* ALLOW_OFFLINE */
 
-#if ( defined ALLOW_GCHEM && defined SHORTWAVE_HEATING )
-C--   This is the place where the 3D array SWFrac3D would need to be
-C     updated to reflect the current amount of surface radiation
-C     avaiable in each layer. The routine to do this depends very much
-C     on the bio-geo-chemical model used to compute turbidity or
-C     concentration of organic matter in the water column, and has not
-C     yet been written.
-C     IF ( useGCHEM .AND. selectPenetratingSW .GT. 1 )
-C    &     CALL GCHEM_SWFRAC( myTime, myIter, myThid )
-#endif
-
 #ifdef  ALLOW_OBCS
       IF (useOBCS) THEN
 C--   Calculate future values on open boundaries
@@ -298,27 +272,6 @@ C--   moved before SEAICE_MODEL call since SEAICE_MODEL needs seaice-obcs fields
 # ifdef ALLOW_AUTODIFF_TAMC
 CADJ STORE theta = comlev1, key=ikey_dynamics, kind=isbyte
 CADJ STORE salt  = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE etaN  = comlev1, key=ikey_dynamics, kind=isbyte
-#  ifdef ALLOW_OBCS_STEVENS
-CADJ STORE uVel  = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE vVel  = comlev1, key=ikey_dynamics, kind=isbyte
-#   ifdef ALLOW_OBCS_EAST
-CADJ STORE OBEtStevens = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE OBEsStevens = comlev1, key=ikey_dynamics, kind=isbyte
-#   endif
-#   ifdef ALLOW_OBCS_WEST
-CADJ STORE OBWtStevens = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE OBWsStevens = comlev1, key=ikey_dynamics, kind=isbyte
-#   endif
-#   ifdef ALLOW_OBCS_NORTH
-CADJ STORE OBNtStevens = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE OBNsStevens = comlev1, key=ikey_dynamics, kind=isbyte
-#   endif
-#   ifdef ALLOW_OBCS_SOUTH
-CADJ STORE OBStStevens = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE OBSsStevens = comlev1, key=ikey_dynamics, kind=isbyte
-#   endif
-#  endif /* ALLOW_OBCS_STEVENS */
 # endif
 # ifdef ALLOW_DEBUG
        IF (debugMode) CALL DEBUG_CALL('OBCS_CALC',myThid)
@@ -326,22 +279,6 @@ CADJ STORE OBSsStevens = comlev1, key=ikey_dynamics, kind=isbyte
        CALL OBCS_CALC( myTime+deltaTClock, myIter+1,
      I                 uVel, vVel, wVel, theta, salt, myThid )
       ENDIF
-# if ( defined ALLOW_AUTODIFF_TAMC && defined ALLOW_OBCS_BALANCE )
-C     This needs to be done ***after*** the if-block to avoid calling
-C     S/R OBCS_CALC in the AD code.
-#  ifdef ALLOW_OBCS_NORTH
-CADJ STORE OBNv        = comlev1, key=ikey_dynamics, kind=isbyte
-#  endif
-#  ifdef ALLOW_OBCS_SOUTH
-CADJ STORE OBSv        = comlev1, key=ikey_dynamics, kind=isbyte
-#  endif
-#  ifdef ALLOW_OBCS_EAST
-CADJ STORE OBEu        = comlev1, key=ikey_dynamics, kind=isbyte
-#  endif
-#  ifdef ALLOW_OBCS_WEST
-CADJ STORE OBWu        = comlev1, key=ikey_dynamics, kind=isbyte
-#  endif
-# endif /* ALLOW_AUTODIFF_TAMC and ALLOW_OBCS_BALANCE */
 #endif  /* ALLOW_OBCS */
 
 #ifdef ALLOW_OCN_COMPON_INTERF
@@ -353,19 +290,33 @@ C jmc: moved here before any freezing/seaice pkg adjustment of surf-fluxes
 #endif /* ALLOW_OCN_COMPON_INTERF */
 
 #ifdef ALLOW_AUTODIFF
+# ifdef ALLOW_SALT_PLUME
       DO bj=myByLo(myThid),myByHi(myThid)
        DO bi=myBxLo(myThid),myBxHi(myThid)
         DO j=1-OLy,sNy+OLy
          DO i=1-OLx,sNx+OLx
-          adjustColdSST_diag(i,j,bi,bj) = 0. _d 0
-# ifdef ALLOW_SALT_PLUME
           saltPlumeDepth(i,j,bi,bj) = 0. _d 0
           saltPlumeFlux(i,j,bi,bj)  = 0. _d 0
-# endif
          ENDDO
         ENDDO
        ENDDO
       ENDDO
+# endif
+# ifdef ALLOW_ECCO
+#  ifdef ALLOW_SIGMAR_COST_CONTRIBUTION
+      DO bj=myByLo(myThid),myByHi(myThid)
+       DO bi=myBxLo(myThid),myBxHi(myThid)
+        DO k=1,Nr
+         DO j=1-OLy,sNy+OLy
+          DO i=1-OLx,sNx+OLx
+           sigmaRfield(i,j,k,bi,bj) = 0. _d 0
+          ENDDO
+         ENDDO
+        ENDDO
+       ENDDO
+      ENDDO
+#  endif
+# endif
 #endif /* ALLOW_AUTODIFF */
 
 #ifdef ALLOW_FRAZIL
@@ -387,24 +338,37 @@ CAT(
 #endif
 CAT)
 
+#ifndef OLD_THSICE_CALL_SEQUENCE
 #if (defined ALLOW_THSICE) && !(defined ALLOW_ATM2D)
       IF ( useThSIce .AND. fluidIsWater ) THEN
 # ifdef ALLOW_AUTODIFF_TAMC
-#  ifdef ALLOW_SEAICE
-CADJ STORE uice,vice         = comlev1, key=ikey_dynamics, kind=isbyte
-#  endif
-CADJ STORE iceMask,iceHeight = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE snowHeight, Tsrf  = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE Qice1, Qice2      = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE sHeating,snowAge  = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE hocemxl, icflxsw  = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE salt,theta        = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE uvel,vvel         = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE qnet,qsw, empmr   = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE atemp,aqh,precip  = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE swdown,lwdown     = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE uice,vice         = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+CADJ STORE iceMask,iceHeight = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+CADJ STORE snowHeight, Tsrf  = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+CADJ STORE Qice1, Qice2      = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+CADJ STORE sHeating, snowAge = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+CADJ STORE hocemxl = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+CADJ STORE icflxsw = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+CADJ STORE salt,theta        = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+CADJ STORE uvel,vvel         = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+CADJ STORE qnet,qsw, empmr   = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+CADJ STORE atemp,aqh,precip  = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+CADJ STORE swdown,lwdown     = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
 #  ifdef NONLIN_FRSURF
-CADJ STORE hFac_surfC        = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE hFac_surfC       = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
 #  endif
 # endif /* ALLOW_AUTODIFF_TAMC */
 # ifdef ALLOW_DEBUG
@@ -417,47 +381,108 @@ C       and modify forcing terms including effects from ice
         CALL TIMER_STOP( 'THSICE_MAIN     [DO_OCEANIC_PHYS]', myThid)
       ENDIF
 #endif /* ALLOW_THSICE */
+#endif /* ndef OLD_THSICE_CALL_SEQUENCE */
 
 #ifdef ALLOW_SEAICE
-# ifdef ALLOW_AUTODIFF_TAMC
-CADJ STORE qnet  = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE qsw   = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE fu,fv = comlev1, key=ikey_dynamics, kind=isbyte
-#  if (defined ALLOW_EXF) && (defined ALLOW_ATM_TEMP)
-CADJ STORE evap  = comlev1, key=ikey_dynamics, kind=isbyte
-#  endif
-CADJ STORE etan      = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE theta     = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE salt      = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE uvel,vvel = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE phiHydLow = comlev1, key=ikey_dynamics, byte=isbyte
-# endif
+# ifdef ALLOW_AUTODIFF
+CADJ STORE area   = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE fu,fv  = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE qnet   = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE qsw    = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE theta  = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE salt   = comlev1, key=ikey_dynamics, kind=isbyte
+#if (defined ALLOW_EXF) && (defined ALLOW_ATM_TEMP)
+CADJ STORE evap   = comlev1, key=ikey_dynamics, kind=isbyte
+#endif
+      IF ( .NOT.useSEAICE .AND. SEAICEadjMODE .EQ. -1 ) THEN
+        CALL SEAICE_FAKE( myTime, myIter, myThid )
+      ENDIF
+CADJ STORE area   = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE fu,fv  = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE qnet   = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE qsw    = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE theta  = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE salt   = comlev1, key=ikey_dynamics, kind=isbyte
+#if (defined ALLOW_EXF) && (defined ALLOW_ATM_TEMP)
+CADJ STORE evap   = comlev1, key=ikey_dynamics, kind=isbyte
+#endif
+# endif /* ALLOW_AUTODIFF */
+#endif /* ALLOW_SEAICE */
+
+#ifdef ALLOW_SEAICE
       IF ( useSEAICE ) THEN
 # ifdef ALLOW_AUTODIFF_TAMC
-CADJ STORE uvel,vvel         = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE uice,vice         = comlev1, key=ikey_dynamics, kind=isbyte
-#  ifdef SEAICE_USE_GROWTH_ADX
-CADJ STORE tices             = comlev1, key=ikey_dynamics, kind=isbyte
+cph-adj-test(
+CADJ STORE area   = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE hsnow  = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE heff   = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE tices  = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE empmr, qnet  = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE qsw,saltflux = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE fu, fv = comlev1, key=ikey_dynamics, kind=isbyte
+cCADJ STORE theta  = comlev1, key=ikey_dynamics, kind=isbyte
+cCADJ STORE salt   = comlev1, key=ikey_dynamics, kind=isbyte
+cph-adj-test)
+c#ifdef ALLOW_EXF
+CADJ STORE atemp,aqh,precip    = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+CADJ STORE swdown,lwdown       = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+CADJ STORE evap                = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+CADJ STORE uwind,vwind         = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+c#endif
+CADJ STORE uvel,vvel           = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+#  ifdef SEAICE_CGRID
+CADJ STORE stressdivergencex   = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+CADJ STORE stressdivergencey   = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
 #  endif
-#  ifdef ALLOW_EXF
-CADJ STORE atemp,aqh,precip  = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE swdown,lwdown     = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE uwind,vwind       = comlev1, key=ikey_dynamics, kind=isbyte
+#  ifdef SEAICE_ALLOW_DYNAMICS
+CADJ STORE uice                = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+CADJ STORE vice                = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+CADJ STORE dwatn               = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+#   ifdef SEAICE_ALLOW_EVP
+CADJ STORE seaice_sigma1       = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+CADJ STORE seaice_sigma2       = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+CADJ STORE seaice_sigma12      = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+#   endif
 #  endif
 #  ifdef SEAICE_VARIABLE_SALINITY
-CADJ STORE hsalt             = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE hsalt               = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
 #  endif
 #  ifdef ATMOSPHERIC_LOADING
-CADJ STORE pload, siceload   = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE pload               = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+CADJ STORE siceload            = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
 #  endif
 #  ifdef NONLIN_FRSURF
-CADJ STORE recip_hfacc       = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE recip_hfacc         = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
 #  endif
+#  ifdef ANNUAL_BALANCE
+CADJ STORE balance_itcount     = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+#  endif /* ANNUAL_BALANCE */
 #  ifdef ALLOW_THSICE
-C-- store thSIce vars before advection (called from SEAICE_MODEL) updates them:
-CADJ STORE iceMask,iceHeight = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE snowHeight,hOceMxL= comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE Qice1, Qice2      = comlev1, key=ikey_dynamics, kind=isbyte
+C-- store thSIce vars before advection (called from SEAICE_MODEL) update them:
+CADJ STORE iceMask,iceHeight = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+CADJ STORE snowHeight, hOceMxL = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+CADJ STORE Qice1, Qice2  = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
 #  endif /* ALLOW_THSICE */
 # endif /* ALLOW_AUTODIFF_TAMC */
 # ifdef ALLOW_DEBUG
@@ -466,24 +491,9 @@ CADJ STORE Qice1, Qice2      = comlev1, key=ikey_dynamics, kind=isbyte
         CALL TIMER_START('SEAICE_MODEL    [DO_OCEANIC_PHYS]', myThid)
         CALL SEAICE_MODEL( myTime, myIter, myThid )
         CALL TIMER_STOP ('SEAICE_MODEL    [DO_OCEANIC_PHYS]', myThid)
-# ifdef ALLOW_AUTODIFF_TAMC
-CADJ STORE tices = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE heff  = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE hsnow = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE area  = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE uIce  = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE vIce  = comlev1, key=ikey_dynamics, kind=isbyte
-# endif
 # ifdef ALLOW_COST
         CALL SEAICE_COST_SENSI ( myTime, myIter, myThid )
 # endif
-# ifdef ALLOW_AUTODIFF
-      ELSEIF ( SEAICEadjMODE .EQ. -1 ) THEN
-#  ifdef ALLOW_AUTODIFF_TAMC
-CADJ STORE area = comlev1, key=ikey_dynamics, kind=isbyte
-#  endif
-        CALL SEAICE_FAKE( myTime, myIter, myThid )
-# endif /* ALLOW_AUTODIFF */
       ENDIF
 #endif /* ALLOW_SEAICE */
 
@@ -501,43 +511,62 @@ C     Export ocean coupling fields to coupled interface (only with pkg/thsice)
 #endif /* ALLOW_OCN_COMPON_INTERF & ALLOW_THSICE */
 
 #ifdef ALLOW_AUTODIFF_TAMC
-CADJ STORE sst, sss          = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE qsw               = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE sst, sss           = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+CADJ STORE qsw                = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
 # ifdef ALLOW_SEAICE
-CADJ STORE area              = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE area               = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
 # endif
 #endif
 
+#ifdef OLD_THSICE_CALL_SEQUENCE
+#if (defined ALLOW_THSICE) && !(defined ALLOW_ATM2D)
+      IF ( useThSIce .AND. fluidIsWater ) THEN
+# ifdef ALLOW_AUTODIFF_TAMC
+cph(
+#  ifdef NONLIN_FRSURF
+CADJ STORE uice,vice        = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+CADJ STORE salt,theta       = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+CADJ STORE qnet,qsw, empmr  = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+CADJ STORE hFac_surfC       = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+#  endif
+# endif
+# ifdef ALLOW_DEBUG
+        IF (debugMode) CALL DEBUG_CALL('THSICE_MAIN',myThid)
+# endif
+C--     Step forward Therm.Sea-Ice variables
+C       and modify forcing terms including effects from ice
+        CALL TIMER_START('THSICE_MAIN     [DO_OCEANIC_PHYS]', myThid)
+        CALL THSICE_MAIN( myTime, myIter, myThid )
+        CALL TIMER_STOP( 'THSICE_MAIN     [DO_OCEANIC_PHYS]', myThid)
+      ENDIF
+#endif /* ALLOW_THSICE */
+#endif /* OLD_THSICE_CALL_SEQUENCE */
+
 #ifdef ALLOW_SHELFICE
       IF ( useShelfIce .AND. fluidIsWater ) THEN
-#ifdef ALLOW_AUTODIFF_TAMC
-CADJ STORE salt, theta       = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE uvel, vvel        = comlev1, key=ikey_dynamics, kind=isbyte
-#endif
-#ifdef ALLOW_STEEP_ICECAVITY
-       IF ( useSTIC ) THEN
-# ifdef ALLOW_DEBUG
-        IF (debugMode) CALL DEBUG_CALL('STIC_THERMODYNAMICS',myThid)
-# endif
-C     use stic_thermodynamics that includes icefront melt processes
-        CALL TIMER_START('STIC_THERMODYNAMICS [DO_OCEANIC_PHYS]',myThid)
-        CALL STIC_THERMODYNAMICS( myTime, myIter, myThid )
-        CALL TIMER_STOP ('STIC_THERMODYNAMICS [DO_OCEANIC_PHYS]',myThid)
-       ELSE
-#else
-       IF ( .TRUE. ) THEN
-#endif
 #ifdef ALLOW_DEBUG
-        IF (debugMode) CALL DEBUG_CALL('SHELFICE_THERMODYNAMICS',myThid)
+       IF (debugMode) CALL DEBUG_CALL('SHELFICE_THERMODYNAMICS',myThid)
+#endif
+#ifdef ALLOW_AUTODIFF_TAMC
+CADJ STORE salt, theta = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
+CADJ STORE uvel, vvel = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
 #endif
 C     compute temperature and (virtual) salt flux at the
 C     shelf-ice ocean interface
-        CALL TIMER_START('SHELFICE_THERMODYNAMICS [DO_OCEANIC_PHYS]',
+       CALL TIMER_START('SHELFICE_THERMODYNAMICS [DO_OCEANIC_PHYS]',
      &       myThid)
-        CALL SHELFICE_THERMODYNAMICS( myTime, myIter, myThid )
-        CALL TIMER_STOP ('SHELFICE_THERMODYNAMICS [DO_OCEANIC_PHYS]',
-     &       myThid)
-       ENDIF
+       CALL SHELFICE_THERMODYNAMICS( myTime, myIter, myThid )
+       CALL TIMER_STOP( 'SHELFICE_THERMODYNAMICS [DO_OCEANIC_PHYS]',
+     &      myThid)
       ENDIF
 #endif /* ALLOW_SHELFICE */
 
@@ -559,14 +588,15 @@ C     ice-front ocean interface
 #ifdef ALLOW_SALT_PLUME
       IF ( useSALT_PLUME ) THEN
 Catn: exchanging saltPlumeFlux:
-        CALL SALT_PLUME_DO_EXCH( myTime, myIter, myThid )
+          CALL SALT_PLUME_DO_EXCH( myTime, myIter, myThid )
       ENDIF
 #endif /* ALLOW_SALT_PLUME */
 
 C--   Freeze water at the surface
       IF ( allowFreezing ) THEN
 #ifdef ALLOW_AUTODIFF_TAMC
-CADJ STORE theta             = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE theta = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
 #endif
         CALL FREEZE_SURFACE( myTime, myIter, myThid )
       ENDIF
@@ -579,9 +609,8 @@ CADJ STORE theta             = comlev1, key=ikey_dynamics, kind=isbyte
 C---  Determines forcing terms based on external fields
 C     relaxation terms, etc.
 #ifdef ALLOW_AUTODIFF
-# ifdef ALLOW_AUTODIFF_TAMC
-CADJ STORE salt, theta       = comlev1, key=ikey_dynamics, kind=isbyte
-# endif
+CADJ STORE salt, theta = comlev1, key = ikey_dynamics,
+CADJ &     kind = isbyte
 #else  /* ALLOW_AUTODIFF */
 C--   if fluid is not water, by-pass surfaceForcing, find_rho, gmredi
 C     and all vertical mixing schemes, but keep OBCS_CALC
@@ -593,37 +622,29 @@ C     and all vertical mixing schemes, but keep OBCS_CALC
         CALL EXTERNAL_FORCING_SURF(
      I             iMin, iMax, jMin, jMax,
      I             myTime, myIter, myThid )
-#ifdef ALLOW_AUTODIFF_TAMC
-C     Avoid calling S/R EXTERNAL_FORCING_SURF in AD routine.
-CADJ STORE EmPmR             = comlev1, key=ikey_dynamics, kind=isbyte
-CADJ STORE uvel, vvel        = comlev1, key=ikey_dynamics, kind=isbyte
-#endif
-
-#ifdef  ALLOW_OBCS
-      IF (useOBCS) THEN
-C--   After all surface fluxes are known apply balancing fluxes and
-C--   apply tidal forcing to open boundaries
-# ifdef ALLOW_DEBUG
-       IF (debugMode) CALL DEBUG_CALL('OBCS_ADJUST',myThid)
-# endif
-       CALL OBCS_ADJUST(
-     I      myTime+deltaTClock, myIter+1, myThid )
-      ENDIF
-#endif  /* ALLOW_OBCS */
 
 #ifdef ALLOW_AUTODIFF_TAMC
-C--   HPF directive to help TAF
+C--   HPF directive to help TAMC
 CHPF$ INDEPENDENT
 #endif /* ALLOW_AUTODIFF_TAMC */
       DO bj=myByLo(myThid),myByHi(myThid)
 #ifdef ALLOW_AUTODIFF_TAMC
-C--   HPF directive to help TAF
+C--   HPF directive to help TAMC
 CHPF$ INDEPENDENT
 #endif /* ALLOW_AUTODIFF_TAMC */
        DO bi=myBxLo(myThid),myBxHi(myThid)
 
 #ifdef ALLOW_AUTODIFF_TAMC
-        tkey = bi + (bj-1)*nSx + (ikey_dynamics-1)*nSx*nSy
+          act1 = bi - myBxLo(myThid)
+          max1 = myBxHi(myThid) - myBxLo(myThid) + 1
+          act2 = bj - myByLo(myThid)
+          max2 = myByHi(myThid) - myByLo(myThid) + 1
+          act3 = myThid - 1
+          max3 = nTx*nTy
+          act4 = ikey_dynamics - 1
+          itdkey = (act1 + 1) + act2*max1
+     &                      + act3*max1*max2
+     &                      + act4*max1*max2*max3
 #endif /* ALLOW_AUTODIFF_TAMC */
 
 C--   Set up work arrays with valid (i.e. not NaN) values
@@ -642,13 +663,13 @@ C This is currently used by GMRedi, IVDC, MXL-depth  and Diagnostics
          ENDDO
         ENDDO
 
+#ifdef ALLOW_AUTODIFF
         DO j=1-OLy,sNy+OLy
          DO i=1-OLx,sNx+OLx
           rhoKm1 (i,j)   = 0. _d 0
           rhoKp1 (i,j)   = 0. _d 0
          ENDDO
         ENDDO
-#ifdef ALLOW_AUTODIFF
 cph all the following init. are necessary for TAF
 cph although some of these are re-initialised later.
         DO k=1,Nr
@@ -690,8 +711,10 @@ cph although some of these are re-initialised later.
            Kwx(i,j,k,bi,bj)  = 0. _d 0
            Kwy(i,j,k,bi,bj)  = 0. _d 0
            Kwz(i,j,k,bi,bj)  = 0. _d 0
+#  ifdef GM_NON_UNITY_DIAGONAL
            Kux(i,j,k,bi,bj)  = 0. _d 0
            Kvy(i,j,k,bi,bj)  = 0. _d 0
+#  endif
 #  ifdef GM_EXTRA_DIAGONAL
            Kuz(i,j,k,bi,bj)  = 0. _d 0
            Kvz(i,j,k,bi,bj)  = 0. _d 0
@@ -727,12 +750,24 @@ cph although some of these are re-initialised later.
 #endif /* ALLOW_AUTODIFF */
 
 #ifdef ALLOW_AUTODIFF_TAMC
-CADJ STORE theta(:,:,:,bi,bj)     = comlev1_bibj, key=tkey, kind=isbyte
-CADJ STORE salt (:,:,:,bi,bj)     = comlev1_bibj, key=tkey, kind=isbyte
-CADJ STORE totphihyd(:,:,:,bi,bj) = comlev1_bibj, key=tkey, kind=isbyte
+CADJ STORE theta(:,:,:,bi,bj) = comlev1_bibj, key=itdkey,
+CADJ &     kind = isbyte
+CADJ STORE salt (:,:,:,bi,bj) = comlev1_bibj, key=itdkey,
+CADJ &     kind = isbyte
+CADJ STORE totphihyd(:,:,:,bi,bj)
+CADJ &     = comlev1_bibj, key=itdkey,
+CADJ &     kind = isbyte
 # ifdef ALLOW_KPP
-CADJ STORE uvel (:,:,:,bi,bj)     = comlev1_bibj, key=tkey, kind=isbyte
-CADJ STORE vvel (:,:,:,bi,bj)     = comlev1_bibj, key=tkey, kind=isbyte
+CADJ STORE uvel (:,:,:,bi,bj) = comlev1_bibj, key=itdkey,
+CADJ &     kind = isbyte
+CADJ STORE vvel (:,:,:,bi,bj) = comlev1_bibj, key=itdkey,
+CADJ &     kind = isbyte
+# endif
+# ifdef ALLOW_SALT_PLUME
+CADJ STORE saltplumedepth(:,:,bi,bj) = comlev1_bibj, key=itdkey,
+CADJ &     kind = isbyte
+CADJ STORE saltplumeflux(:,:,bi,bj) = comlev1_bibj, key=itdkey,
+CADJ &     kind = isbyte
 # endif
 #endif /* ALLOW_AUTODIFF_TAMC */
 
@@ -756,10 +791,9 @@ C     needed here, will be used anyway in calc_phi_hyd (data flow easier this wa
 #endif /* ALLOW_DOWN_SLOPE */
 #ifdef ALLOW_BBL
          IF ( useBBL ) THEN
-C     pkg/bbl requires in-situ bbl density for depths equal to and deeper
-C     than the bbl. To reduce computation and storage requirement,
-C     these densities are stored in the dry grid boxes of rhoInSitu.
-C     See BBL_CALC_RHO for details.
+C     pkg/bbl requires in-situ bbl density for depths equal to and deeper than the bbl.
+C     To reduce computation and storage requirement, these densities are stored in the
+C     dry grid boxes of rhoInSitu.  See BBL_CALC_RHO for details.
            DO k=Nr,1,-1
             CALL BBL_CALC_RHO(
      I                  theta, salt,
@@ -800,9 +834,6 @@ C-    horizontally uniform (tRef) reference state
            ENDDO
           ENDDO
         ENDIF
-# ifdef ALLOW_AUTODIFF_TAMC
-CADJ STORE rhoInSitu(:,:,:,bi,bj) = comlev1_bibj, key=tkey, kind=isbyte
-# endif
 #endif /* ALLOW_AUTODIFF */
 
 #ifdef ALLOW_DEBUG
@@ -816,6 +847,21 @@ CADJ STORE rhoInSitu(:,:,:,bi,bj) = comlev1_bibj, key=tkey, kind=isbyte
 C--     Start of diagnostic loop
         DO k=Nr,1,-1
 
+#ifdef ALLOW_AUTODIFF_TAMC
+C? Patrick, is this formula correct now that we change the loop range?
+C? Do we still need this?
+cph kkey formula corrected.
+cph Needed for rhoK, rhoKm1, in the case useGMREDI.
+          kkey = (itdkey-1)*Nr + k
+#endif /* ALLOW_AUTODIFF_TAMC */
+
+c#ifdef ALLOW_AUTODIFF_TAMC
+cCADJ STORE theta(:,:,k,bi,bj) = comlev1_bibj_k, key=kkey,
+cCADJ &     kind = isbyte
+cCADJ STORE salt(:,:,k,bi,bj)  = comlev1_bibj_k, key=kkey,
+cCADJ &     kind = isbyte
+c#endif /* ALLOW_AUTODIFF_TAMC */
+
 C--       Calculate gradients of potential density for isoneutral
 C         slope terms (e.g. GM/Redi tensor or IVDC diffusivity)
           IF ( calcGMRedi .OR. (k.GT.1 .AND. calcConvect)
@@ -823,49 +869,44 @@ C         slope terms (e.g. GM/Redi tensor or IVDC diffusivity)
      &         .OR. useMY82 .OR. useGGL90
      &         .OR. useSALT_PLUME .OR. doDiagsRho.GE.1 ) THEN
             IF (k.GT.1) THEN
-             IF ( usingZCoords ) THEN
-              DO j=jMin,jMax
-               DO i=iMin,iMax
-                rhoKp1(i,j) = rhoInSitu(i,j,k,bi,bj)
-               ENDDO
-              ENDDO
-              CALL FIND_RHO_2D(
+#ifdef ALLOW_AUTODIFF_TAMC
+CADJ STORE theta(:,:,k-1,bi,bj) = comlev1_bibj_k, key=kkey,
+CADJ &     kind = isbyte
+CADJ STORE salt (:,:,k-1,bi,bj) = comlev1_bibj_k, key=kkey,
+CADJ &     kind = isbyte
+CADJ STORE rhokm1 (bi,bj)       = comlev1_bibj_k, key=kkey,
+CADJ &     kind = isbyte
+#endif /* ALLOW_AUTODIFF_TAMC */
+             CALL FIND_RHO_2D(
      I                 iMin, iMax, jMin, jMax, k,
      I                 theta(1-OLx,1-OLy,k-1,bi,bj),
      I                 salt (1-OLx,1-OLy,k-1,bi,bj),
      O                 rhoKm1,
      I                 k-1, bi, bj, myThid )
-             ELSE
-              CALL FIND_RHO_2D(
-     I                 iMin, iMax, jMin, jMax, k-1,
-     I                 theta(1-OLx,1-OLy,k,bi,bj),
-     I                 salt (1-OLx,1-OLy,k,bi,bj),
-     O                 rhoKp1,
-     I                 k, bi, bj, myThid )
-              DO j=jMin,jMax
-               DO i=iMin,iMax
-                rhoKm1(i,j) = rhoInSitu(i,j,k-1,bi,bj)
-               ENDDO
-              ENDDO
-             ENDIF
             ENDIF
 #ifdef ALLOW_DEBUG
             IF (debugMode) CALL DEBUG_CALL('GRAD_SIGMA',myThid)
 #endif
+cph Avoid variable aliasing for adjoint !!!
+            DO j=jMin,jMax
+             DO i=iMin,iMax
+              rhoKp1(i,j) = rhoInSitu(i,j,k,bi,bj)
+             ENDDO
+            ENDDO
             CALL GRAD_SIGMA(
      I             bi, bj, iMin, iMax, jMin, jMax, k,
      I             rhoInSitu(1-OLx,1-OLy,k,bi,bj), rhoKm1, rhoKp1,
      O             sigmaX, sigmaY, sigmaR,
      I             myThid )
-
-#ifdef ALLOW_LEITH_QG
+#ifdef ALLOW_ECCO
+# ifdef ALLOW_SIGMAR_COST_CONTRIBUTION
             DO j=jMin,jMax
              DO i=iMin,iMax
               sigmaRfield(i,j,k,bi,bj)=sigmaR(i,j,k)
              ENDDO
             ENDDO
-#endif /* ALLOW_LEITH_QG */
-
+# endif
+#endif /* ALLOW_ECCO */
 #ifdef ALLOW_AUTODIFF
 #ifdef GMREDI_WITH_STABLE_ADJOINT
 cgf zero out adjoint fields to stabilize pkg/gmredi adjoint
@@ -901,33 +942,33 @@ C--     end of diagnostic k loop (Nr:1)
         ENDDO
 
 #ifdef ALLOW_AUTODIFF_TAMC
-C     Avoid recomputing sigmaR and IVDConvCount in AD routine.
-CADJ STORE sigmaR                   =comlev1_bibj,key=tkey,kind=isbyte
-CADJ STORE IVDConvCount(:,:,:,bi,bj)=comlev1_bibj,key=tkey,kind=isbyte
+CADJ STORE IVDConvCount(:,:,:,bi,bj)
+CADJ &     = comlev1_bibj, key=itdkey,
+CADJ &     kind = isbyte
 #endif
 
 C--     Diagnose Mixed Layer Depth:
         IF ( calcGMRedi .OR. MOD(doDiagsRho,2).EQ.1 ) THEN
           CALL CALC_OCE_MXLAYER(
-     I              rhoInSitu(1-OLx,1-OLy,kSrf,bi,bj), sigmaR,
+     I              rhoInSitu(1-OLx,1-OLy,1,bi,bj), sigmaR,
      I              bi, bj, myTime, myIter, myThid )
         ENDIF
 
 #ifdef ALLOW_SALT_PLUME
         IF ( useSALT_PLUME ) THEN
           CALL SALT_PLUME_CALC_DEPTH(
-     I              rhoInSitu(1-OLx,1-OLy,kSrf,bi,bj), sigmaR,
+     I              rhoInSitu(1-OLx,1-OLy,1,bi,bj), sigmaR,
      I              bi, bj, myTime, myIter, myThid )
 #ifdef SALT_PLUME_VOLUME
           CALL SALT_PLUME_VOLFRAC(
      I              bi, bj, myTime, myIter, myThid )
 C-- get forcings for kpp
           CALL SALT_PLUME_APPLY(
-     I              1, bi, bj, recip_hFacC(1-OLx,1-OLy,kSrf,bi,bj),
+     I              1, bi, bj, recip_hFacC(1-OLx,1-OLy,1,bi,bj),
      I              theta, 0,
      I              myTime, myIter, myThid )
           CALL SALT_PLUME_APPLY(
-     I              2, bi, bj, recip_hFacC(1-OLx,1-OLy,kSrf,bi,bj),
+     I              2, bi, bj, recip_hFacC(1-OLx,1-OLy,1,bi,bj),
      I              salt, 0,
      I              myTime, myIter, myThid )
 C-- need to call this S/R from here to apply just before kpp
@@ -936,10 +977,6 @@ C-- need to call this S/R from here to apply just before kpp
      I              myTime, myIter, myThid )
 #endif /* SALT_PLUME_VOLUME */
         ENDIF
-# ifdef ALLOW_AUTODIFF_TAMC
-CADJ STORE saltplumedepth(:,:,bi,bj)= comlev1_bibj,key=tkey,kind=isbyte
-CADJ STORE saltplumeflux(:,:,bi,bj) = comlev1_bibj,key=tkey,kind=isbyte
-# endif /* ALLOW_AUTODIFF_TAMC */
 #endif /* ALLOW_SALT_PLUME */
 
 #ifdef ALLOW_DIAGNOSTICS
@@ -954,10 +991,21 @@ C      now called earlier, before bi,bj loop.
 
 #ifdef ALLOW_AUTODIFF_TAMC
 cph needed for KPP
-CADJ STORE surfaceForcingU(:,:,bi,bj)=comlev1_bibj,key=tkey,kind=isbyte
-CADJ STORE surfaceForcingV(:,:,bi,bj)=comlev1_bibj,key=tkey,kind=isbyte
-CADJ STORE surfaceForcingS(:,:,bi,bj)=comlev1_bibj,key=tkey,kind=isbyte
-CADJ STORE surfaceForcingT(:,:,bi,bj)=comlev1_bibj,key=tkey,kind=isbyte
+CADJ STORE surfaceForcingU(:,:,bi,bj)
+CADJ &     = comlev1_bibj, key=itdkey,
+CADJ &     kind = isbyte
+CADJ STORE surfaceForcingV(:,:,bi,bj)
+CADJ &     = comlev1_bibj, key=itdkey,
+CADJ &     kind = isbyte
+CADJ STORE surfaceForcingS(:,:,bi,bj)
+CADJ &     = comlev1_bibj, key=itdkey,
+CADJ &     kind = isbyte
+CADJ STORE surfaceForcingT(:,:,bi,bj)
+CADJ &     = comlev1_bibj, key=itdkey,
+CADJ &     kind = isbyte
+CADJ STORE surfaceForcingTice(:,:,bi,bj)
+CADJ &     = comlev1_bibj, key=itdkey,
+CADJ &     kind = isbyte
 #endif /* ALLOW_AUTODIFF_TAMC */
 
 #ifdef  ALLOW_KPP
@@ -1013,10 +1061,11 @@ C--     Compute MY82 mixing coefficients
 
 #ifdef  ALLOW_GGL90
 #ifdef ALLOW_AUTODIFF_TAMC
-CADJ STORE GGL90TKE(:,:,:,bi,bj) = comlev1_bibj, key=tkey, kind=isbyte
+CADJ STORE GGL90TKE (:,:,:,bi,bj) = comlev1_bibj, key=itdkey,
+CADJ &     kind = isbyte
 #endif /* ALLOW_AUTODIFF_TAMC */
 C--     Compute GGL90 mixing coefficients
-        IF ( useGGL90 .AND. Nr.GT.1 ) THEN
+        IF (useGGL90) THEN
 #ifdef ALLOW_DEBUG
           IF (debugMode) CALL DEBUG_CALL('GGL90_CALC',myThid)
 #endif
@@ -1027,6 +1076,16 @@ C--     Compute GGL90 mixing coefficients
         ENDIF
 #endif /* ALLOW_GGL90 */
 
+#ifdef ALLOW_TIMEAVE
+        IF ( taveFreq.GT. 0. _d 0 ) THEN
+          CALL TIMEAVE_SURF_FLUX( bi, bj, myTime, myIter, myThid)
+        ENDIF
+        IF ( taveFreq.GT.0. .AND. calcConvect ) THEN
+          CALL TIMEAVE_CUMULATE(ConvectCountTave, IVDConvCount,
+     I                           Nr, deltaTClock, bi, bj, myThid)
+        ENDIF
+#endif /* ALLOW_TIMEAVE */
+
 #ifdef ALLOW_GMREDI
 #ifdef ALLOW_AUTODIFF_TAMC
 # ifndef GM_EXCLUDE_CLIPPING
@@ -1034,9 +1093,12 @@ cph storing here is needed only for one GMREDI_OPTIONS:
 cph define GM_BOLUS_ADVEC
 cph keep it although TAF says you dont need to.
 cph but I have avoided the #ifdef for now, in case more things change
-CADJ STORE sigmaX(:,:,:) = comlev1_bibj, key = tkey, kind = isbyte
-CADJ STORE sigmaY(:,:,:) = comlev1_bibj, key = tkey, kind = isbyte
-CADJ STORE sigmaR(:,:,:) = comlev1_bibj, key = tkey, kind = isbyte
+CADJ STORE sigmaX(:,:,:)        = comlev1_bibj, key=itdkey,
+CADJ &     kind = isbyte
+CADJ STORE sigmaY(:,:,:)        = comlev1_bibj, key=itdkey,
+CADJ &     kind = isbyte
+CADJ STORE sigmaR(:,:,:)        = comlev1_bibj, key=itdkey,
+CADJ &     kind = isbyte
 # endif
 #endif /* ALLOW_AUTODIFF_TAMC */
 
@@ -1117,11 +1179,6 @@ C---  if fluid Is Water: end
         CALL KPP_DO_EXCH( myThid )
       ENDIF
 #endif /* ALLOW_KPP */
-
-#ifdef ALLOW_GGL90
-      IF ( useGGL90 )
-     &  CALL GGL90_EXCHANGES( myThid )
-#endif /* ALLOW_GGL90 */
 
 #ifdef ALLOW_DIAGNOSTICS
       IF ( fluidIsWater .AND. useDiagnostics ) THEN

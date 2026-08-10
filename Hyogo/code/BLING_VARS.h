@@ -377,7 +377,8 @@ CAT(
      &                     chi_rd,
      &                     chi_bg,
      &                     e_rd,
-     &                     e_bg
+     &                     e_bg,
+     &                     SWFrac3D
 #endif
 CAT)
 
@@ -494,6 +495,9 @@ CAT(
       _RL swfrac_ir(1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr+1,nSx,nSy)
       _RL swfrac_rd(1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr+1,nSx,nSy)
       _RL swfrac_bg(1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr+1,nSx,nSy)
+C     SWFrac3D :: combined (ir+rd+bg) shortwave fraction profile,
+C                 used by BLING_HEATING to penetrate Qsw in apply_forcing.F
+      _RL SWFrac3D(1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr+1,nSx,nSy)
       _RL k0_rd
       _RL k0_bg
       _RL k_ir
