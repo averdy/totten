@@ -4,7 +4,7 @@
       SEAICE_strength    = 2.75e+04,
       HO = 1.0,
       SEAICE_drag = 0.004, 
-      SEAICE_waterDrag = 0.1,
+      SEAICE_waterDrag = 10.000,
 #      SEAICE_waterDrag = 3.000,
       SEAICEuseTILT=.FALSE.,
       SEAICEpresH0=2.,
