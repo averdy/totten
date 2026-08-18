@@ -18,9 +18,16 @@ C     === Global variables ===
 #include "EEPARAMS.h"
 #include "PARAMS.h"
 #ifdef ALLOW_EXF
+# ifdef USE_EXF_INTERPOLATION
+#  ifdef ALLOW_EXCH2
+#   include "W2_EXCH2_SIZE.h"
+#   include "W2_EXCH2_TOPOLOGY.h"
+#  endif /* ALLOW_EXCH2 */
+#  include "SET_GRID.h"
+# endif /* USE_EXF_INTERPOLATION */
 # include "EXF_PARAM.h"
+# include "EXF_CONSTANTS.h"
 # include "EXF_INTERP_SIZE.h"
-# include "EXF_INTERP_PARAM.h"
 #endif /* ALLOW_EXF */
 #include "BLING_VARS.h"
 
@@ -177,7 +184,15 @@ C ==========================================================
      &                     MLmix_max,
      &                     chlsat_locTimWindow,
      &                     river_conc_po4,
-     &                     river_dom_to_nut
+     &                     river_dom_to_nut,
+CAT add parameters for self-shading
+     &                     k0_rd,
+     &                     k0_bg,
+     &                     k_ir,
+     &                     chi_rd,
+     &                     chi_bg,
+     &                     e_rd,
+     &                     e_bg
 
 C ==========================================================
 C   BLING forcing
@@ -300,6 +315,8 @@ C                       satellite-equivalent chlorophyll diagnostic (and cost)
 #ifdef ALLOW_EXF
 #ifdef USE_EXF_INTERPOLATION
       INTEGER j
+      INTEGER gridNx, gridNy
+      _RL inp_lon0, inp_lat0, inp_dLon, inp_dLat
 #endif /* USE_EXF_INTERPOLATION */
 #endif /* ALLOW_EXF */
 
@@ -417,6 +434,14 @@ C     Default values
       MLmix_max            = 200.0 _d 0
       chlsat_locTimWindow(1) = 12.0 _d 0
       chlsat_locTimWindow(2) = 13.5 _d 0
+CAT Set self-shading parameters
+      k0_rd                = 0.225 _d 0
+      k0_bg                = 2.32  _d -2
+      k_ir                 = 1.0 _d 0 / 0.6 _d 0
+      chi_rd               = 3.7 _d -2
+      chi_bg               = 7.4 _d -2
+      e_rd                 = 6.29 _d -1
+      e_bg                 = 6.74 _d -1
 
       bling_windFile         = ' '
       bling_atmospFile       = ' '
@@ -457,13 +482,22 @@ C     Default values
 #ifdef USE_EXF_INTERPOLATION
 C--   set default input location to match (in case of simple Lat-Long grid)
 C     model grid cell-center position (leading to trivial interpolation)
-      apco2_lon0         = inp_lon0
-      apco2_lat0         = inp_lat0
-      apco2_nlon         = inp_gNx
-      apco2_nlat         = inp_gNy
-      apco2_lon_inc      = inp_dLon
+      inp_lon0 = xgOrigin + delX(1)*exf_half
+      inp_lat0 = ygOrigin + delY(1)*exf_half
+      inp_dLon = delX(1)
+      inp_dLat = delY(1)
+      apco2_lon0     = inp_lon0
+      apco2_lat0     = inp_lat0
+      apco2_nlon     = gridNx
+      apco2_nlat     = gridNy
+      apco2_lon_inc  = inp_dLon
       DO j=1,MAX_LAT_INC
-        apco2_lat_inc(j) = inp_dLat(j)
+        IF (j.LT.gridNy) THEN
+          inp_dLat = (delY(j) + delY(j+1))*exf_half
+        ELSE
+          inp_dLat = 0.
+        ENDIF
+        apco2_lat_inc(j) = inp_dLat
       ENDDO
       apco2_interpMethod = 1
 #endif /* USE_EXF_INTERPOLATION */

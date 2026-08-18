@@ -19,6 +19,7 @@ C     === Global variables ===
 #include "PARAMS.h"
 #include "GRID.h"
 #ifdef ALLOW_EXF
+# include "EXF_PARAM.h"
 # include "EXF_INTERP_SIZE.h"
 #endif
 #include "BLING_VARS.h"

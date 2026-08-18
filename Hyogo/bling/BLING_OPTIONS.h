@@ -38,7 +38,7 @@ C the average light over the mixed layer (as in original BLING model)
 #undef ML_MEAN_LIGHT
 
 C Assume that phytoplankton are homogenized in the mixed layer
-#define ML_MEAN_PHYTO
+#undef ML_MEAN_PHYTO
 
 C Calculate MLD using a threshold criterion. If undefined,
 C MLD is calculated using the second derivative of rho(z)
@@ -47,11 +47,14 @@ C MLD is calculated using the second derivative of rho(z)
 C Determine PAR from shortwave radiation Qsw;
 C otherwise determined from date and latitude
 C (Do not define if not using pkg/exf)
-#undef USE_QSW
+#define USE_QSW
 
 C Light absorption scheme from Manizza et al. (2005),
 C with self shading from phytoplankton
-#undef PHYTO_SELF_SHADING
+#define PHYTO_SELF_SHADING
+
+c Allow self-shading to impact ocean heating
+#define BLING_HEATING
 
 C Note: atm pressure from PKG/EXF is always used for air-sea flux calculation
 C if available; otherwise read from file or set to constant value (1 atm)

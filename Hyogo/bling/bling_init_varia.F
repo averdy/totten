@@ -47,6 +47,12 @@ C--   Initialise global variables
 #ifndef USE_BLING_V1
             phyto_diaz(i,j,k,bi,bj) = 4. _d -7 / permil
 #endif
+CAT(
+C New global variables added for bling_swfrac
+            swfrac_ir(i,j,k,bi,bj)  = 0. _d 0
+            swfrac_rd(i,j,k,bi,bj)  = 0. _d 0
+            swfrac_bg(i,j,k,bi,bj)  = 0. _d 0
+CAT)
           ENDDO
           chl_sat(i,j,bi,bj)        = 0. _d 0
           gamma_POM_2d(i,j,bi,bj)   = gamma_POM

@@ -365,7 +365,22 @@ C          satellite-equivalent chlorophyll diagnostic (and cost)
      &                     alpfe,
      &                     k0,
      &                     MLmix_max,
-     &                     chlsat_locTimWindow
+     &                     chlsat_locTimWindow,
+CAT(
+#ifdef PHYTO_SELF_SHADING
+     &                     swfrac_ir,
+     &                     swfrac_rd,
+     &                     swfrac_bg,
+     &                     k0_rd,
+     &                     k0_bg,
+     &                     k_ir,
+     &                     chi_rd,
+     &                     chi_bg,
+     &                     e_rd,
+     &                     e_bg,
+     &                     SWFrac3D
+#endif
+CAT)
 
       _RL InputFe(1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
       _RL omegaC(1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr,nSx,nSy)
@@ -475,6 +490,23 @@ C          satellite-equivalent chlorophyll diagnostic (and cost)
       _RL k0
       _RL MLmix_max
       _RL chlsat_locTimWindow(2)
+CAT(
+#ifdef PHYTO_SELF_SHADING
+      _RL swfrac_ir(1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr+1,nSx,nSy)
+      _RL swfrac_rd(1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr+1,nSx,nSy)
+      _RL swfrac_bg(1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr+1,nSx,nSy)
+C     SWFrac3D :: combined (ir+rd+bg) shortwave fraction profile,
+C                 used by BLING_HEATING to penetrate Qsw in apply_forcing.F
+      _RL SWFrac3D(1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr+1,nSx,nSy)
+      _RL k0_rd
+      _RL k0_bg
+      _RL k_ir
+      _RL chi_rd
+      _RL chi_bg
+      _RL e_rd
+      _RL e_bg
+#endif
+CAT)
 
 CEH3 ;;; Local Variables: ***
 CEH3 ;;; mode:fortran ***

@@ -514,6 +514,57 @@ c mld
 
 c light
 
+CAT(
+C Euphotic depth (zeu) and ratios mld:zeu and zeu:mld
+
+      diagName  = 'BLGZEU  '
+      diagTitle = 'Self-shaded euphotic depth'
+      diagUnits = 'm               '
+      diagCode  = 'SM P    L1      '
+      CALL DIAGNOSTICS_ADDTOLIST( diagNum,
+     I       diagName, diagCode, diagUnits, diagTitle, 0, myThid )
+
+      diagName  = 'BLGMLZEU'
+      diagTitle = 'Ratio of mixed layer depth to euphotic depth'
+      diagUnits = '-                '
+      diagCode  = 'SM P    L1       '
+      CALL DIAGNOSTICS_ADDTOLIST( diagNum,
+     I       diagName, diagCode, diagUnits, diagTitle, 0, myThid )
+
+      diagName  = 'BLGZEUML'
+      diagTitle = 'Ratio of euphotic depth to mixed layer depth'
+      diagUnits = '-                '
+      diagCode  = 'SM P    L1       '
+      CALL DIAGNOSTICS_ADDTOLIST( diagNum,
+     I       diagName, diagCode, diagUnits, diagTitle, 0, myThid )
+
+CAT)
+
+CAT(
+      diagName  = 'FRACIR  '
+      diagTitle = 'Fraction of infrared penetrating short-wave'
+      diagUnits = 'Dimensionless   '
+      diagCode  = 'SM P    LR      '
+      CALL DIAGNOSTICS_ADDTOLIST( diagNum,
+     I       diagName, diagCode, diagUnits, diagTitle, 0, myThid )
+
+      diagName  = 'FRACBG  '
+      diagTitle = 'Fraction of blue-green penetrating short-wave'
+      diagUnits = 'Dimensionless   '
+      diagCode  = 'SM P    LR      '
+      CALL DIAGNOSTICS_ADDTOLIST( diagNum,
+     I       diagName, diagCode, diagUnits, diagTitle, 0, myThid )
+
+      diagName  = 'FRACRD  '
+      diagTitle = 'Fraction of red penetrating short-wave'
+      diagUnits = 'Dimensionless   '
+      diagCode  = 'SM P    LR      '
+      CALL DIAGNOSTICS_ADDTOLIST( diagNum,
+     I       diagName, diagCode, diagUnits, diagTitle, 0, myThid )
+
+
+CAT)
+
       diagName  = 'BLGIRRIS'
       diagTitle = 'Local irradiance'
       diagUnits = 'W/m2            '

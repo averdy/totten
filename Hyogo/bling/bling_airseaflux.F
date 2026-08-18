@@ -37,6 +37,7 @@ C     === Global variables ===
 #include "GRID.h"
 #include "FFIELDS.h"
 #ifdef ALLOW_EXF
+# include "EXF_PARAM.h"
 # include "EXF_INTERP_SIZE.h"
 #endif
 #include "BLING_VARS.h"
